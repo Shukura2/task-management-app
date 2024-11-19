@@ -139,18 +139,17 @@ const Home = () => {
       return;
     }
 
+    const updatedTask = { ...values, notify: !values.notify };
+
     setTodoLists((prevTasks) =>
-      prevTasks.map((task) =>
-        task.id === values.id ? { ...task, notify: !task.notify } : task
-      )
+      prevTasks.map((task) => (task.id === values.id ? updatedTask : task))
     );
 
     const taskDoc = doc(db, "tasks", values.id);
-    await updateDoc(taskDoc, { notify: !values.notify });
+    await updateDoc(taskDoc, { notify: updatedTask.notify });
 
-    const task = todoLists?.find((task) => task.id === values.id);
-    if (task && !task.notify) {
-      scheduleNotification(task);
+    if (updatedTask.notify) {
+      scheduleNotification(updatedTask);
     }
   };
 
