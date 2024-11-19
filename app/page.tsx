@@ -1,101 +1,390 @@
+"use client";
+
 import Image from "next/image";
+import { useEffect, useState } from "react";
+import { useSession, signIn, signOut } from "next-auth/react";
+import { Formik, Form, Field } from "formik";
+import Modal from "./(components)/Modal";
+import {
+  validateTitle,
+  validateAdditionalNote,
+  validateDueDate,
+} from "./(components)/formikValidation";
+import ImageIcon from "./public/image-icon.png";
+import {
+  addDoc,
+  collection,
+  deleteDoc,
+  doc,
+  getDocs,
+  updateDoc,
+} from "firebase/firestore";
+import { db } from "./config/firebase";
+import TodoList from "./(components)/TodoList";
+import {
+  scheduleNotification,
+  TodoInputsType,
+  userName,
+  formatDate,
+} from "./(components)/utility";
 
-export default function Home() {
+const Home = () => {
+  const [inputType, setInputType] = useState<string>("text");
+  const [todoInputs, setTodoInputs] = useState<TodoInputsType>({
+    id: "",
+    title: "",
+    additionalNote: "",
+    dueDate: "",
+    status: "pending",
+    notify: false,
+  });
+  const [todoLists, setTodoLists] = useState<TodoInputsType[]>([]);
+  const [isModalOpen, setIsModalOpen] = useState<boolean>(false);
+  const [readMore, setReadMore] = useState<boolean>(false);
+  const tasksCollectionRef = collection(db, "tasks");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [filter, setFilter] = useState<string>("all");
+  const [draggingIndex, setDraggingIndex] = useState<null | number>(null);
+  const [isSignin, setIsSignIn] = useState<boolean>(false);
+
+  useEffect(() => {
+    if (Notification.permission !== "granted") {
+      Notification.requestPermission();
+    }
+  }, []);
+
+  const { data: session } = useSession();
+
+  const handleSubmit = async (
+    values: TodoInputsType,
+    { resetForm }: { resetForm: () => void }
+  ) => {
+    setIsProcessing(true);
+    try {
+      const docRef = await addDoc(tasksCollectionRef, {
+        title: values.title,
+        additionalNote: values.additionalNote,
+        dueDate: values.dueDate,
+        status: values.status,
+        notify: values.notify,
+      });
+
+      const newTask = {
+        id: docRef.id,
+        title: values.title,
+        additionalNote: values.additionalNote,
+        dueDate: values.dueDate,
+        status: values.status,
+        notify: values.notify,
+      };
+
+      setTodoLists((prev) => [...prev, newTask]);
+      setIsProcessing(false);
+      resetForm();
+    } catch (error) {
+      throw Error;
+    }
+  };
+
+  const getTasksList = async () => {
+    setLoading(true);
+    try {
+      const data = await getDocs(tasksCollectionRef);
+      const lists = data.docs.map((doc) => {
+        const taskData = doc.data();
+
+        return {
+          id: doc.id,
+          title: taskData.title,
+          additionalNote: taskData.additionalNote,
+          dueDate: taskData.dueDate,
+          status: taskData.status,
+          notify: taskData.notify,
+        } as TodoInputsType;
+      });
+      setTodoLists(lists);
+      setLoading(false);
+    } catch (error) {
+      setLoading(false);
+      throw error;
+    }
+  };
+
+  const showPendingTasks = () => setFilter("pending");
+  const showCompletedTasks = () => setFilter("completed");
+
+  const filteredTasks =
+    filter === "all"
+      ? todoLists
+      : todoLists?.filter((task) => task.status === filter);
+
+  const deleteTask = async (id: string) => {
+    try {
+      const filterTask = todoLists?.filter((todoList) => todoList.id !== id);
+      setTodoLists(filterTask);
+      const taskDoc = doc(db, "tasks", id);
+      await deleteDoc(taskDoc);
+    } catch (error) {
+      throw error;
+    }
+  };
+
+  useEffect(() => {
+    getTasksList();
+  }, []);
+
+  const handleAddNotification = async (values: TodoInputsType) => {
+    if (!values.id) {
+      return;
+    }
+
+    setTodoLists((prevTasks) =>
+      prevTasks.map((task) =>
+        task.id === values.id ? { ...task, notify: !task.notify } : task
+      )
+    );
+
+    const taskDoc = doc(db, "tasks", values.id);
+    await updateDoc(taskDoc, { notify: !values.notify });
+
+    const task = todoLists?.find((task) => task.id === values.id);
+    if (task && !task.notify) {
+      scheduleNotification(task);
+    }
+  };
+
+  const handleChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>
+  ) => {
+    const { name, value } = e.target;
+    setTodoInputs({ ...todoInputs, [name]: value });
+  };
+
+  const openModal = (task: TodoInputsType) => {
+    setTodoInputs(task);
+    setIsModalOpen(true);
+  };
+
+  const closeModal = () => {
+    setTodoInputs({
+      title: "",
+      additionalNote: "",
+      dueDate: "",
+      status: "",
+      id: "",
+    });
+    setIsModalOpen(false);
+  };
+
+  const handleDragStart = (index: number) => {
+    setDraggingIndex(index);
+  };
+
+  const handleDragOver = (
+    event: React.DragEvent<HTMLDivElement>,
+    index: number
+  ) => {
+    event.preventDefault();
+    if (draggingIndex === null || draggingIndex === index) return;
+    const updatedItems = [...todoLists];
+    const [draggedItems] = updatedItems.splice(draggingIndex, 1);
+    updatedItems.splice(index, 0, draggedItems);
+    setDraggingIndex(index);
+    setTodoLists(updatedItems);
+  };
+
+  const handleDrop = () => {
+    setDraggingIndex(null);
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
-
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
+    <div className="max-w-[1440px] mx-auto flex justify-center relative">
+      <div
+        onClick={() => setIsSignIn(!isSignin)}
+        className={`absolute top-4 right-10 cursor-pointer group`}
+      >
+        {session ? (
+          <div className=" relative flex items-center justify-center">
             <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
+              src={`${session.user.image}`}
+              alt=""
+              className="  rounded-full"
+              width={28}
+              height={28}
             />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+            <span className=" absolute top-full mt-2 w-max p-1 text-xs text-white bg-black rounded opacity-0 group-hover:opacity-100 transition-opacity duration-300">
+              {userName(session)}
+            </span>
+          </div>
+        ) : (
+          <div className=" bg-slate-300 w-7 h-7 rounded-full flex justify-center items-center">
+            <Image
+              src={ImageIcon}
+              width={28}
+              height={28}
+              alt=""
+              className=" rounded-full"
+            />
+          </div>
+        )}
+      </div>
+
+      <div className=" absolute top-[20px] right-[80px]">
+        {isSignin && session && (
+          <button onClick={() => signOut()}>Signout</button>
+        )}
+      </div>
+
+      <div className=" absolute top-[50px] right-5">
+        {isSignin && !session && (
+          <button onClick={() => signIn()}>Signin</button>
+        )}
+      </div>
+
+      <div className="md:w-[50%]">
+        <div className="bg-white mt-8 p-4 md:p-6">
+          <p className=" text-2xl md:text-4xl font-bold text-center text-purple-800 mb-5">
+            Task Management App
+          </p>
+          <Formik initialValues={todoInputs} onSubmit={handleSubmit} resetForm>
+            {({ errors, touched }) => (
+              <Form>
+                <div className="mb-3">
+                  <label className="font-bold">Title:</label>
+                  <Field
+                    name="title"
+                    placeholder="Title"
+                    className="input-style"
+                    validate={validateTitle}
+                  />
+                  {errors.title && touched.title && (
+                    <div className=" text-red-500 text-xs">{errors.title}</div>
+                  )}
+                </div>
+
+                <div className="mb-3">
+                  <label className="font-bold">Additional note:</label>
+                  <Field
+                    as="textarea"
+                    name="additionalNote"
+                    placeholder="Additional note"
+                    className="input-style textarea"
+                    validate={validateAdditionalNote}
+                  />
+                  {errors.additionalNote && touched.additionalNote && (
+                    <div className=" text-red-500 text-xs">
+                      {errors.additionalNote}
+                    </div>
+                  )}
+                </div>
+
+                <div className="mb-3">
+                  <label className="font-bold">Due Date:</label>
+                  <Field
+                    name="dueDate"
+                    placeholder="Select due date"
+                    className="input-style"
+                    validate={validateDueDate}
+                    type={inputType}
+                    onFocus={() => setInputType("datetime-local")}
+                    onBlur={() => setInputType("text")}
+                  />
+                  {errors.dueDate && touched.dueDate && (
+                    <div className=" text-red-500 text-xs">
+                      {errors.dueDate}
+                    </div>
+                  )}
+                </div>
+
+                <button
+                  type="submit"
+                  className={`${
+                    isProcessing
+                      ? "cta-noactive bg-purple-800 text-white font-bold px-2 py-1 rounded-md"
+                      : "cta-active bg-purple-800 text-white font-bold px-2 py-1 rounded-md"
+                  }`}
+                >
+                  {isProcessing ? "Processing" : "Submit"}
+                </button>
+              </Form>
+            )}
+          </Formik>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+
+        <Modal
+          isOpen={isModalOpen}
+          closeModal={closeModal}
+          todoInputs={todoInputs}
+          handleChange={handleChange}
+          inputType={inputType}
+          setInputType={setInputType}
+          todoLists={todoLists}
+          setTodoLists={setTodoLists}
+        />
+
+        <div className="mt-5 p-6">
+          {loading ? (
+            <>
+              <p>Loading...</p>
+            </>
+          ) : (
+            <>
+              {todoLists.length > 0 ? (
+                <>
+                  <div className=" flex gap-4 justify-end items-center mb-9">
+                    <p className=" italic font-bold">Filter by: </p>
+                    <div className=" flex gap-3">
+                      <button
+                        onClick={showPendingTasks}
+                        className="bg-yellow-500 font-bold py-1 px-3 capitalize rounded-md"
+                      >
+                        pending
+                      </button>
+                      <button
+                        onClick={showCompletedTasks}
+                        className="bg-green-600 font-bold py-1 px-3 capitalize rounded-md"
+                      >
+                        completed
+                      </button>
+                    </div>
+                  </div>
+
+                  {filteredTasks?.map((list, index) => (
+                    <TodoList
+                      key={list?.id}
+                      list={list}
+                      index={index}
+                      handleAddNotification={handleAddNotification}
+                      openModal={openModal}
+                      deleteTask={deleteTask}
+                      formatDate={formatDate}
+                      readMore={readMore}
+                      setReadMore={setReadMore}
+                      handleDragStart={handleDragStart}
+                      handleDragOver={handleDragOver}
+                      handleDrop={handleDrop}
+                    />
+                  ))}
+                </>
+              ) : (
+                <p>No todo yet</p>
+              )}
+
+              {todoLists.length > 0 && (
+                <button
+                  onClick={() => setTodoLists([])}
+                  className="bg-red-500 text-xl text-white px-2 py-1 rounded-md"
+                >
+                  Clear all
+                </button>
+              )}
+            </>
+          )}
+        </div>
+      </div>
     </div>
   );
-}
+};
+
+export default Home;
