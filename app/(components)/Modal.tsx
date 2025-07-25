@@ -19,7 +19,6 @@ const Modal = ({
   todoLists,
   setTodoLists,
 }: ModalProps) => {
-  if (!isOpen) return null;
   const [isProcessingUpdate, setIsProcessingUpdate] = useState<boolean>(false);
 
   const handleUpdate = async (values: TodoInputsType) => {
@@ -52,6 +51,8 @@ const Modal = ({
       throw error;
     }
   };
+
+  if (!isOpen) return null;
 
   return (
     <div className="fixed right-0 left-0 top-0 bottom-0 bg-dark flex justify-center items-center z-[1]">

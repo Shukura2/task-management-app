@@ -83,30 +83,6 @@ const Home = () => {
       setIsProcessing(false);
       resetForm();
     } catch (error) {
-      throw Error;
-    }
-  };
-
-  const getTasksList = async () => {
-    setLoading(true);
-    try {
-      const data = await getDocs(tasksCollectionRef);
-      const lists = data.docs.map((doc) => {
-        const taskData = doc.data();
-
-        return {
-          id: doc.id,
-          title: taskData.title,
-          additionalNote: taskData.additionalNote,
-          dueDate: taskData.dueDate,
-          status: taskData.status,
-          notify: taskData.notify,
-        } as TodoInputsType;
-      });
-      setTodoLists(lists);
-      setLoading(false);
-    } catch (error) {
-      setLoading(false);
       throw error;
     }
   };
@@ -131,8 +107,32 @@ const Home = () => {
   };
 
   useEffect(() => {
+    const getTasksList = async () => {
+      setLoading(true);
+      try {
+        const data = await getDocs(tasksCollectionRef);
+        const lists = data.docs.map((doc) => {
+          const taskData = doc.data();
+
+          return {
+            id: doc.id,
+            title: taskData.title,
+            additionalNote: taskData.additionalNote,
+            dueDate: taskData.dueDate,
+            status: taskData.status,
+            notify: taskData.notify,
+          } as TodoInputsType;
+        });
+        setTodoLists(lists);
+        setLoading(false);
+      } catch (error) {
+        setLoading(false);
+        throw error;
+      }
+    };
+
     getTasksList();
-  }, []);
+  }, [tasksCollectionRef]);
 
   const handleAddNotification = async (values: TodoInputsType) => {
     if (!values.id) {

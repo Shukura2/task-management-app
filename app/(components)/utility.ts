@@ -60,8 +60,8 @@ export const scheduleNotification = (task: TodoInputsType) => {
 };
 
 export const userName = (session: SessionType) => {
-  let name = session.user.name.split(" ")[0];
-  let names = name.charAt(0).toUpperCase() + name.substring(1);
+  const name = session.user.name.split(" ")[0];
+  const names = name.charAt(0).toUpperCase() + name.substring(1);
   return names;
 };
 
